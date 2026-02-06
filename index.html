@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>My PWA</title>
+
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <meta name="theme-color" content="#2563eb" />
+</head>
+<body>
+  <h1>My PWA on GitHub Pages</h1>
+
+  <button id="installBtn" hidden>Cài đặt (Install)</button>
+  <p id="installHint"></p>
+
+  <script>
+    // 1) Register Service Worker
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("./sw.js");
+    }
+
+    // 2) Custom install button (Chromium)
+    let deferredPrompt = null;
+    const installBtn = document.getElementById("installBtn");
+    const hint = document.getElementById("installHint");
+
+    window.addEventListener("beforeinstallprompt", (e) => {
+      // Ngăn mini-infobar mặc định và lưu event để gọi sau
+      e.preventDefault();
+      deferredPrompt = e;
+      installBtn.hidden = false;
+      hint.textContent = "Bạn có thể cài app này vào màn hình chính.";
+    });
+
+    installBtn.addEventListener("click", async () => {
+      if (!deferredPrompt) return;
+
+      deferredPrompt.prompt(); // mở prompt cài đặt
+      const choice = await deferredPrompt.userChoice;
+
+      // reset để tránh gọi lại
+      deferredPrompt = null;
+      installBtn.hidden = true;
+
+      hint.textContent = (choice.outcome === "accepted")
+        ? "Đã bắt đầu cài đặt 🎉"
+        : "Bạn đã huỷ cài đặt.";
+    });
+
+    window.addEventListener("appinstalled", () => {
+      hint.textContent = "Đã cài đặt xong ✅";
+    });
+  </script>
+</body>
+</html>
+``
