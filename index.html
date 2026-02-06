@@ -5,53 +5,151 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>My PWA</title>
 
+  <!-- Manifest -->
   <link rel="manifest" href="./manifest.webmanifest" />
-  <meta name="theme-color" content="#2563eb" />
-</head>
-<body>
-  <h1>My PWA on GitHub Pages</h1>
 
-  <button id="installBtn" hidden>Cài đặt (Install)</button>
-  <p id="installHint"></p>
+  <!-- Theme color (Chrome/Android UI) -->
+  <meta name="theme-color" content="#2563eb" />
+
+  <!-- iOS: giúp “Add to Home Screen” hiển thị như web app -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="MyPWA" />
+  <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+  <!-- Gợi ý thêm (không bắt buộc): status bar style -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; padding: 18px; }
+    .card { max-width: 720px; margin: 0 auto; }
+    button { padding: 10px 14px; border-radius: 10px; border: 1px solid #cbd5e1; background: #2563eb; color: #fff; cursor: pointer; }
+    button:disabled { opacity: .6; cursor: not-allowed; }
+    .muted { color: #475569; }
+
+    /* Modal iOS */
+    #iosHelpOverlay[hidden] { display: none; }
+    #iosHelpOverlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.55);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 9999; padding: 16px;
+    }
+    #iosHelpBox {
+      width: 100%; max-width: 460px; background: #fff; border-radius: 14px;
+      padding: 16px; box-shadow: 0 10px 30px rgba(0,0,0,.25);
+    }
+    #closeIosBtn {
+      width: 100%; margin-top: 10px; background: #0f172a;
+      border: none;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="card">
+    <h1>My PWA on GitHub Pages</h1>
+    <p class="muted">
+      Nút “Cài đặt” sẽ hiện prompt trên Android/desktop Chromium; trên iPhone sẽ hiện hướng dẫn Add to Home Screen.
+    </p>
+
+    <button id="installBtn">Cài đặt</button>
+    <p id="status" class="muted"></p>
+  </div>
+
+  <!-- iOS help modal -->
+  <div id="iosHelpOverlay" hidden>
+    <div id="iosHelpBox">
+      <h3 style="margin:0 0 8px;">Cài lên Màn hình chính (iPhone/iPad)</h3>
+      <ol style="margin:0; padding-left: 18px;">
+        <li>Mở trang bằng <b>Safari</b> (khuyến nghị).</li>
+        <li>Nhấn nút <b>Share</b> (ô vuông có mũi tên lên).</li>
+        <li>Chọn <b>Add to Home Screen</b> → <b>Add</b>.</li>
+      </ol>
+      <button id="closeIosBtn">Đóng</button>
+    </div>
+  </div>
 
   <script>
-    // 1) Register Service Worker
-    if ("serviceWorker" in navigator) {
+    // ========== 1) Register Service Worker (cần cho PWA) ==========
+    // Service Worker chạy trên HTTPS (GitHub Pages ok) iceWorker" in navigator) {
       navigator.serviceWorker.register("./sw.js");
     }
 
-    // 2) Custom install button (Chromium)
-    let deferredPrompt = null;
+    // ========== 2) Helpers ==========
     const installBtn = document.getElementById("installBtn");
-    const hint = document.getElementById("installHint");
+    const statusEl = document.getElementById("status");
+    const iosOverlay = document.getElementById("iosHelpOverlay");
+    const closeIosBtn = document.getElementById("closeIosBtn");
+
+    const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent);
+
+    // Detect đang chạy ở chế độ “đã cài” (standalone/app mode)
+    // - display-mode MQ là cách chung [9](https://stackoverflow.com/questions/30413244/why-do-service-workers-only-work-over-https)[10](https://developers.google.com/codelabs/pwa-training/pwa04--prompt-measure-install)
+    // - iOS có navigator.standalone (thường dùng để detect homescreen mode) [11](https://www.w3.org/TR/appmanifest/)
+    const isStandalone = () =>
+      (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) ||
+      window.navigator.standalone === true;
+
+    function setStatus(msg) {
+      statusEl.textContent = msg || "";
+    }
+
+    function updateInstallButtonVisibility() {
+      // Nếu đã chạy ở app mode thì ẩn nút cài đặt
+      if (isStandalone()) {
+        installBtn.hidden = true;
+        setStatus("App đang chạy ở chế độ đã cài đặt ✅");
+      } else {
+        installBtn.hidden = false;
+      }
+    }
+
+    // ========== 3) Chromium install prompt ==========
+    // beforeinstallprompt: chỉ Chromium-based (MDN cảnh báo non-standard) [1](https://docs.github.com/en/pages/getting-started-with-github-pages/securing-your-github-pages-site-with-https)[2](https://christianheilmann.com/2022/01/13/turning-a-github-page-into-a-progressive-web-app/)
+    let deferredPrompt = null;
 
     window.addEventListener("beforeinstallprompt", (e) => {
-      // Ngăn mini-infobar mặc định và lưu event để gọi sau
-      e.preventDefault();
-      deferredPrompt = e;
-      installBtn.hidden = false;
-      hint.textContent = "Bạn có thể cài app này vào màn hình chính.";
-    });
-
-    installBtn.addEventListener("click", async () => {
-      if (!deferredPrompt) return;
-
-      deferredPrompt.prompt(); // mở prompt cài đặt
-      const choice = await deferredPrompt.userChoice;
-
-      // reset để tránh gọi lại
-      deferredPrompt = null;
-      installBtn.hidden = true;
-
-      hint.textContent = (choice.outcome === "accepted")
-        ? "Đã bắt đầu cài đặt 🎉"
-        : "Bạn đã huỷ cài đặt.";
+      e.preventDefault();       // chặn UI mặc định
+      deferredPrompt = e;       // lưu lại để gọi khi user bấm nút
+      setStatus("Thiết bị hỗ trợ cài đặt. Bấm 'Cài đặt' để tiếp tục.");
     });
 
     window.addEventListener("appinstalled", () => {
-      hint.textContent = "Đã cài đặt xong ✅";
+      setStatus("Đã cài đặt xong ✅");
+      deferredPrompt = null;
+      updateInstallButtonVisibility();
     });
+
+    // ========== 4) Button click behavior ==========
+    installBtn.addEventListener("click", async () => {
+      // Nếu có deferredPrompt => Android/desktop Chromium cài đặt thật
+      if (deferredPrompt) {
+        deferredPrompt.prompt(); // mở prompt cài đặt [1](https://docs.github.com/en/pages/getting-started-with-github-pages/securing-your-github-pages-site-with-https)[2](https://christianheilmann.com/2022/01/13/turning-a-github-page-into-a-progressive-web-app/)
+        const choice = await deferredPrompt.userChoice;
+        if (choice && choice.outcome === "accepted") {
+          setStatus("Bạn đã chấp nhận cài đặt 🎉");
+        } else {
+          setStatus("Bạn đã huỷ cài đặt.");
+        }
+        deferredPrompt = null;
+        return;
+      }
+
+      // iOS: không có install prompt/banner → show hướng dẫn A2HS [3](https://dev.to/austinwdigital/intro-to-service-workers-best-practices-threat-mitigation-59a3)[4](https://caniuse.com/mdn-css_at-rules_media_display-mode_standalone)[5](https://stackoverflow.com/questions/46228604/pwa-on-github-pages)
+      if (isIOS()) {
+        iosOverlay.hidden = false;
+        setStatus("iOS không có prompt cài đặt tự động. Hãy làm theo hướng dẫn.");
+        return;
+      }
+
+      // Fallback cho các trình duyệt khác
+      setStatus("Trình duyệt này không hỗ trợ prompt cài đặt. Hãy dùng menu của trình duyệt để 'Install app' / 'Add to Home Screen'.");
+    });
+
+    closeIosBtn.addEventListener("click", () => {
+      iosOverlay.hidden = true;
+    });
+
+    // initial state
+    updateInstallButtonVisibility();
   </script>
 </body>
 </html>
-``
